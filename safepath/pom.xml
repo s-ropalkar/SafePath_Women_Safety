@@ -7,11 +7,10 @@
     <groupId>com.safepath</groupId>
     <artifactId>safepath</artifactId>
     <version>1.0.0</version>
-<properties>
-    <maven.compiler.release>26</maven.compiler.release>
-    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-</properties>
 
+<properties>
+    <maven.compiler.release>17</maven.compiler.release>
+</properties>
     <dependencies>
 
         <!-- MySQL -->
@@ -33,8 +32,8 @@
     <artifactId>maven-compiler-plugin</artifactId>
     <version>3.14.0</version>
     <configuration>
-        <release>26</release>
-    </configuration>
+    <release>17</release>
+</configuration>
 </plugin>
             <!-- Create executable JAR -->
             <plugin>
