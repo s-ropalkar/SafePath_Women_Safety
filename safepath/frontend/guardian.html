@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <title>SafePath AI - Guardian Live Tracking</title>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"/>
+  <link rel="stylesheet" href="guardian.css"/>
+</head>
+<body class="guardian-page">
+  <div class="guardian-dashboard">
+    <aside class="sidebar">
+      <header class="brand">
+        <div class="logo"><i class="fa-solid fa-shield-halved"></i></div>
+        <div>
+          <h1>SafePath</h1>
+          <p>Guardian Dashboard</p>
+        </div>
+      </header>
+
+      <section class="card">
+        <h3><i class="fa-solid fa-signal" style="margin-right:6px"></i> Traveler Live Status</h3>
+        <div id="statusBadge" class="status-badge moderate">
+          <span class="dot">●</span> <span id="statusText">WAITING FOR DATA</span>
+        </div>
+        <div class="score-container">
+          <span id="scoreVal" class="score-value">--</span>
+          <span style="color: rgba(255,255,255,0.45); font-size: 14px;">/ 100 Safety Score</span>
+        </div>
+      </section>
+
+      <section class="card">
+        <h3><i class="fa-solid fa-location-dot" style="margin-right:6px"></i> Tracking Details</h3>
+        <div class="info-list">
+          <div class="info-item">
+            <span>Traveler Name</span>
+            <span id="travelerName">--</span>
+          </div>
+          <div class="info-item">
+            <span>Last Updated</span>
+            <span id="lastUpdated">--</span>
+          </div>
+          <div class="info-item">
+            <span>Current Coords</span>
+            <span id="currentCoords">--</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="card" style="flex-grow: 1; display: flex; flex-direction: column;">
+        <h3><i class="fa-solid fa-list" style="margin-right:6px"></i> Activity &amp; Alerts Log</h3>
+        <div class="log-container" id="logContainer">
+          <div class="log-item">
+            <div class="log-time">--:--</div>
+            <div class="log-text">Waiting for traveler connection...</div>
+          </div>
+        </div>
+      </section>
+    </aside>
+
+    <main class="map-container">
+      <div id="map"></div>
+    </main>
+  </div>
+
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script src="origin.js"></script>
+  <script src="guardian.js"></script>
+</body>
+</html>

@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <title>SafePath AI - Login</title>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"/>
+  <link rel="stylesheet" href="styles.css"/>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body class="login-page">
+  <main class="login-shell">
+    <section class="login-card">
+      <header class="login-brand">
+        <div class="brand-mark"><i class="fa-solid fa-shield-halved"></i></div>
+        <div>
+          <h1>SafePath</h1>
+          <p>Your Safety, Our Priority</p>
+        </div>
+      </header>
+
+      <button type="button" id="googleLoginBtn" class="btn-google" style="display:none">
+        <span class="google-icon">G</span>
+        Continue with Google
+      </button>
+      <div id="googleBtnHost" class="google-btn-host"></div>
+
+      <div class="login-divider"><span>or</span></div>
+
+      <div id="loginForm">
+        <div class="input-group">
+          <label>Email</label>
+          <input id="authEmail" type="email" placeholder="you@email.com" autocomplete="email"/>
+        </div>
+        <div class="input-group">
+          <label>Password</label>
+          <input id="authPassword" type="password" placeholder="Password" autocomplete="current-password"/>
+        </div>
+        <button type="button" id="loginBtn" class="btn-primary"><i class="fa-solid fa-right-to-bracket" style="margin-right:8px"></i>Login</button>
+        <p class="info-text login-switch"><a href="#" id="forgotPasswordLink">Forgot password?</a></p>
+        <p class="info-text login-switch">New here? <a href="#" id="showSignUpLink">Sign up</a></p>
+      </div>
+
+      <div id="forgotForm" style="display:none">
+        <p class="info-text">Enter your email and we will send a reset link.</p>
+        <div class="input-group">
+          <label>Email</label>
+          <input id="forgotEmail" type="email" placeholder="you@email.com"/>
+        </div>
+        <button type="button" id="forgotBtn" class="btn-primary">Send Reset Link</button>
+        <p class="info-text login-switch"><a href="#" id="backToLoginLink">Back to login</a></p>
+      </div>
+
+      <div id="signUpForm" style="display:none">
+        <div class="input-group">
+          <label>Full Name</label>
+          <input id="signUpName" type="text" placeholder="Your name"/>
+        </div>
+        <div class="input-group">
+          <label>Email</label>
+          <input id="signUpEmail" type="email" placeholder="you@email.com"/>
+        </div>
+        <div class="input-group">
+          <label>Password</label>
+          <input id="signUpPassword" type="password" placeholder="Min 6 characters"/>
+        </div>
+        <button type="button" id="signUpBtn" class="btn-primary"><i class="fa-solid fa-user-plus" style="margin-right:8px"></i>Create Account</button>
+        <p class="info-text login-switch">Have an account? <a href="#" id="showLoginLink">Login</a></p>
+      </div>
+    </section>
+  </main>
+  <div id="toastHost"></div>
+  <script src="origin.js"></script>
+  <script src="features/api.js"></script>
+  <script src="login.js"></script>
+</body>
+</html>

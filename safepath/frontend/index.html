@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <title>SafePath AI - Safety-Aware Navigation</title>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"/>
+  <link rel="stylesheet" href="styles.css"/>
+</head>
+<body class="app-body">
+
+  <div id="sidebarBackdrop" class="sidebar-backdrop"></div>
+
+  <!-- Sidebar -->
+  <aside id="appSidebar" class="sidebar">
+    <div class="sidebar-brand">
+      <div class="brand-mark"><i class="fa-solid fa-shield-halved"></i></div>
+      <div>
+        <h1>SafePath</h1>
+        <p class="brand-tagline">Your Safety, Our Priority</p>
+      </div>
+    </div>
+
+    <nav class="sidebar-nav">
+      <div class="nav-section">
+        <span class="nav-section-title nav-title-navigation">Navigation</span>
+        <a href="#page-plan-route" class="nav-link nav-plan"><i class="fa-solid fa-route"></i> Plan Route</a>
+      </div>
+
+      <div class="sidebar-panel sidebar-live-safety">
+        <h3 class="sidebar-heading sidebar-heading-safety">Live Safety</h3>
+        <h2 id="safetyStatus" class="live-safety-status">--</h2>
+        <p class="live-safety-score">Score: <span id="safetyScore">--</span>/100</p>
+        <button id="locationBtn" type="button" class="btn-sidebar-location">Turn On Location</button>
+        <p id="locationStatus" class="sidebar-location-status">GPS off — enable to show your position on the map</p>
+      </div>
+
+      <div class="sidebar-panel sidebar-xai">
+        <h3 class="sidebar-heading sidebar-heading-xai">
+          <i class="fa-solid fa-brain"></i> Explainable Safety Score (XAI)
+        </h3>
+        <div class="xai-metrics">
+          <p class="xai-metric">Confidence: <strong><span id="xaiConfidence">--</span>%</strong></p>
+          <p class="xai-metric">30-min forecast: <strong><span id="xaiPredicted">--</span>/100</strong></p>
+          <p id="xaiTrend" class="xai-trend xai-trend--stable">Trend: stable</p>
+        </div>
+        <ul id="xaiFactors" class="xai-factors">
+          <li>Enable GPS for live XAI analysis</li>
+        </ul>
+        <p class="xai-footnote">POI + community proxy · roadmap: NCRB/police open data</p>
+      </div>
+
+      <div class="sidebar-panel sidebar-demo">
+        <h3 class="sidebar-heading sidebar-heading-demo">Demo Mode</h3>
+        <p class="sidebar-panel-desc">Run a full demo without laptop GPS — ideal for judges.</p>
+        <button id="launchDemoBtn" type="button" class="btn-demo btn-sidebar-demo">Launch One-Click Demo</button>
+      </div>
+
+      <div class="sidebar-panel sidebar-map-layers">
+        <h3 class="sidebar-heading sidebar-heading-layers">Map Layers</h3>
+        <button id="toggleHeatmapBtn" type="button" class="btn-sidebar-heatmap" style="opacity:0.65">Show Unsafe Heatmap</button>
+        <div class="heatmap-legend sidebar-heatmap-legend">
+          <span><i class="heatmap-high"></i> High</span>
+          <span><i class="heatmap-medium"></i> Medium</span>
+          <span><i class="heatmap-low"></i> Low</span>
+        </div>
+      </div>
+
+      <div class="nav-section sidebar-checkpoints">
+        <span class="nav-section-title nav-title-checkpoints">Safe Checkpoints</span>
+        <button id="togglePolice" onclick="toggleMarkers('police')" class="nav-link nav-checkpoint" style="opacity:0.55"><i class="fa-solid fa-building-shield"></i> Police Stations</button>
+        <button id="toggleHospital" onclick="toggleMarkers('hospital')" class="nav-link nav-checkpoint" style="opacity:0.55"><i class="fa-solid fa-hospital"></i> Hospitals</button>
+        <button id="toggleHotel" onclick="toggleMarkers('hotel')" class="nav-link nav-checkpoint" style="opacity:0.55"><i class="fa-solid fa-hotel"></i> Hotels</button>
+        <button id="toggleHostel" onclick="toggleMarkers('hostel')" class="nav-link nav-checkpoint" style="opacity:0.55"><i class="fa-solid fa-bed"></i> Hostels</button>
+        <button id="toggleMetro" onclick="toggleMarkers('metro')" class="nav-link nav-checkpoint" style="opacity:0.55"><i class="fa-solid fa-train-subway"></i> Metro Stations</button>
+        <button id="toggleBus" onclick="toggleMarkers('bus')" class="nav-link nav-checkpoint" style="opacity:0.55"><i class="fa-solid fa-bus"></i> Bus Stops</button>
+      </div>
+
+      <div class="sidebar-panel sidebar-safety-actions">
+        <h3 class="sidebar-heading sidebar-heading-actions">Safety Actions</h3>
+        <button type="button" onclick="reportUnsafe()" class="btn-sidebar-warning">Report Unsafe Location</button>
+        <button type="button" onclick="triggerSOS()" class="btn-sidebar-sos">Emergency SOS</button>
+        <button type="button" onclick="reachSafeConfirmation()" class="btn-sidebar-confirm">Confirm Safe Arrival</button>
+      </div>
+    </nav>
+
+    <div class="sidebar-footer">
+      <div class="sidebar-footer-nav">
+        <a href="#page-guardians" class="nav-link nav-guardians"><i class="fa-solid fa-user-shield"></i> Guardians</a>
+        <a href="#page-profile" class="nav-link nav-profile"><i class="fa-solid fa-user"></i> Profile</a>
+      </div>
+      <button onclick="logoutUser()" class="auth-chip">Logout</button>
+    </div>
+  </aside>
+
+  <div class="app-shell">
+    <button id="sidebarToggle" class="sidebar-toggle mobile-only" type="button" aria-label="Open menu"><i class="fa-solid fa-bars"></i></button>
+
+    <!-- PLAN ROUTE -->
+    <main id="page-plan-route" class="app-page">
+      <header class="route-toolbar">
+        <div class="route-toolbar-brand">
+          <h2>SafePath AI</h2>
+          <p id="userGreeting" class="toolbar-greeting"></p>
+        </div>
+
+        <div class="route-toolbar-form">
+          <div class="toolbar-field">
+            <label for="source">Source</label>
+            <input id="source" list="sourceSuggestions" placeholder="Enter source address" autocomplete="off"/>
+            <datalist id="sourceSuggestions"></datalist>
+          </div>
+          <div class="toolbar-field">
+            <label for="destination">Destination</label>
+            <input id="destination" list="destinationSuggestions" placeholder="Enter destination address" autocomplete="off"/>
+            <datalist id="destinationSuggestions"></datalist>
+          </div>
+          <div class="toolbar-field toolbar-field--mode">
+            <label for="transportMode">Travel Mode</label>
+            <select id="transportMode">
+              <option value="WALK">Walking</option>
+              <option value="BIKE">Bike</option>
+              <option value="CAR" selected>Cab / Car</option>
+              <option value="BUS">Bus</option>
+            </select>
+          </div>
+          <button id="findRouteBtn" class="btn-primary btn-toolbar">Find Route</button>
+        </div>
+      </header>
+
+      <section class="map-stage">
+        <div id="map" class="map-container"></div>
+
+        <div class="map-overlays">
+          <div class="heatmap-popover">
+            <strong><i class="fa-solid fa-fire"></i> Heatmap ON</strong>
+            <p>Unsafe zones from community reports are highlighted on the map.</p>
+          </div>
+          <div class="map-risk-legend">
+            <h4>Risk Levels</h4>
+            <div class="legend-item"><span class="legend-dot low"></span> Low Risk</div>
+            <div class="legend-item"><span class="legend-dot medium"></span> Medium Risk</div>
+            <div class="legend-item"><span class="legend-dot high"></span> High Risk</div>
+            <div class="legend-item"><span class="legend-badge confirmed"></span> Confirmed zone (3+ reports)</div>
+          </div>
+          <button id="trackBtn" class="map-track-fab floating-btn">Start Tracking</button>
+        </div>
+      </section>
+
+      <div id="mapRouteResizer" class="map-route-resizer" title="Drag to resize map" aria-label="Resize map">
+        <i class="fa-solid fa-grip-lines"></i>
+      </div>
+
+      <section class="below-map">
+        <section id="routeComparePanel" class="route-compare-panel">
+          <h3 class="section-title">Route Selection</h3>
+          <div id="routeCards" class="route-cards route-cards--stack"></div>
+
+          <p id="recommendedReason" class="visually-hidden" aria-hidden="true"></p>
+
+          <div id="routeLegend" class="visually-hidden" aria-hidden="true" style="display:none">
+            <button onclick="highlightRoute('shortest')" class="btn-marker legend-shortest">Shortest</button>
+            <button onclick="highlightRoute('safest')" class="btn-marker legend-safest">Safest</button>
+            <button onclick="highlightRoute('balanced')" class="btn-marker legend-balanced">Balanced</button>
+          </div>
+
+          <div class="why-route-card">
+            <h4><i class="fa-solid fa-brain"></i> Explainable Safety Score (XAI)</h4>
+            <p>Each route shows safety score, AI confidence %, and 30-minute risk forecast — no official crime data required.</p>
+          </div>
+        </section>
+
+      </section>
+    </main>
+
+    <!-- GUARDIANS -->
+    <section id="page-guardians" class="app-page guardians-page">
+      <div class="guardians-header">
+        <div>
+          <h2>Guardians</h2>
+          <p class="guardians-subtitle">People who receive live tracking links and safety alerts.</p>
+        </div>
+        <button type="button" onclick="openGuardianModal()" class="btn-primary btn-add-guardian"><i class="fa-solid fa-plus"></i> Add Guardian</button>
+      </div>
+
+      <div class="guardians-content guardian-section">
+        <ul id="guardianList" class="guardian-list"></ul>
+
+        <div class="guardian-action-cards">
+          <button type="button" onclick="copyLiveLink()" class="guardian-action-card guardian-action-card--purple">
+            <span class="gac-icon"><i class="fa-solid fa-link"></i></span>
+            <span class="gac-text">
+              <strong>Copy Live Tracking Link</strong>
+              <small>Share your live location with your guardian.</small>
+            </span>
+          </button>
+          <button type="button" onclick="shareLiveLinkWhatsApp()" class="guardian-action-card guardian-action-card--green">
+            <span class="gac-icon"><i class="fa-brands fa-whatsapp"></i></span>
+            <span class="gac-text">
+              <strong>Share on WhatsApp</strong>
+              <small>Share your tracking link instantly.</small>
+            </span>
+          </button>
+        </div>
+
+        <div class="guardian-access-banner">
+          <i class="fa-solid fa-shield-halved"></i>
+          <div>
+            <strong>Guardian Access</strong>
+            <p>Guardians can view your live location and safety status on the guardian dashboard.</p>
+            <a id="guardianDashboardLink" href="#" target="_blank" class="guardian-dashboard-link" style="display:none">
+              Open Guardian Page <i class="fa-solid fa-arrow-up-right-from-square"></i>
+            </a>
+          </div>
+        </div>
+      </div>
+      <a href="#page-plan-route" class="back-to-map"><i class="fa-solid fa-arrow-left"></i> Back to map</a>
+    </section>
+
+    <!-- PROFILE -->
+    <section id="page-profile" class="app-page">
+      <header class="page-header">
+        <h2>Profile</h2>
+      </header>
+      <div class="profile-layout">
+        <div class="profile-card page-card">
+          <div class="profile-avatar-large"><i class="fa-solid fa-user"></i></div>
+          <div class="profile-fields">
+            <div class="profile-field"><span class="pf-label">Name</span><span class="pf-value" id="profileName">—</span></div>
+            <div class="profile-field"><span class="pf-label">Email</span><span class="pf-value" id="profileEmail">—</span></div>
+          </div>
+        </div>
+        <div class="page-card profile-section">
+          <h3>Trip History</h3>
+          <div id="tripHistoryList" class="profile-list">
+            <p class="info-text empty-state">Your completed trips will appear here.</p>
+          </div>
+        </div>
+        <div class="page-card profile-section">
+          <h3>Unsafe Reports Submitted</h3>
+          <div id="myReportsList" class="profile-list">
+            <p class="info-text empty-state">Reports you submit appear on the community heatmap.</p>
+          </div>
+        </div>
+      </div>
+      <a href="#page-plan-route" class="back-to-map"><i class="fa-solid fa-arrow-left"></i> Back to map</a>
+    </section>
+  </div>
+
+  <nav class="mobile-bottom-nav" aria-label="Quick actions">
+    <button type="button" id="mobileNavMenu"><i class="fa-solid fa-bars"></i> Menu</button>
+    <button type="button" onclick="findRoute()"><i class="fa-solid fa-route"></i> Routes</button>
+    <button type="button" id="mobileTrackBtn"><i class="fa-solid fa-location-crosshairs"></i> Track</button>
+  </nav>
+
+  <div id="loadingSpinner" class="loading" style="display:none">
+    <div class="spinner"></div>
+    <p>Analyzing routes...</p>
+  </div>
+
+  <div id="guardianModal" class="modal-overlay" style="display:none">
+    <div class="modal-card">
+      <header class="modal-header">
+        <h3><i class="fa-solid fa-user-shield" style="margin-right:8px;color:var(--primary)"></i>Add Guardian</h3>
+        <button class="close-btn" onclick="closeGuardianModal()">&times;</button>
+      </header>
+      <div class="modal-body">
+        <p class="modal-desc">Guardians receive trip-start and safety alert emails.</p>
+        <div class="input-group">
+          <label for="guardianName">Name</label>
+          <input id="guardianName" placeholder="e.g. Mom" type="text"/>
+        </div>
+        <div class="input-group">
+          <label for="guardianPhone">Phone</label>
+          <input id="guardianPhone" placeholder="Country code + number" type="tel"/>
+        </div>
+        <div class="input-group">
+          <label for="guardianEmail">Email</label>
+          <input id="guardianEmail" placeholder="For safety alerts" type="email"/>
+        </div>
+        <button onclick="addGuardian()" class="btn-primary">Save Guardian</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="unsafeModal" class="modal-overlay" style="display: none;">
+    <div class="modal-card">
+      <header class="modal-header">
+        <h3><i class="fa-solid fa-triangle-exclamation" style="margin-right:8px;color:var(--warning)"></i>Report Unsafe Location</h3>
+        <button id="closeUnsafeModal" class="close-btn">&times;</button>
+      </header>
+      <div class="modal-body">
+        <p class="modal-desc">Pin an unsafe spot on the map.</p>
+        <p id="unsafeCoordsLabel" class="unsafe-coords-label">Tap map or use GPS to pick location</p>
+        <div class="input-group">
+          <label>Select Category</label>
+          <div class="category-grid" id="categoryGrid">
+            <button class="cat-btn active" data-category="Poor Lighting">Poor Lighting</button>
+            <button class="cat-btn" data-category="Harassment Area">Harassment Area</button>
+            <button class="cat-btn" data-category="Deserted Street">Deserted Street</button>
+            <button class="cat-btn" data-category="Crime Zone">Crime Zone</button>
+            <button class="cat-btn" data-category="Suspicious Activity">Suspicious Activity</button>
+            <button class="cat-btn" data-category="Other">Other</button>
+          </div>
+        </div>
+        <div class="input-group">
+          <label>Severity Level</label>
+          <div class="severity-selector" id="severitySelector">
+            <button class="sev-btn active" data-severity="Low" style="--sev-color: #eab308">Low</button>
+            <button class="sev-btn" data-severity="Medium" style="--sev-color: #f97316">Medium</button>
+            <button class="sev-btn" data-severity="High" style="--sev-color: #ef4444">High</button>
+            <button class="sev-btn" data-severity="Critical" style="--sev-color: #991b1b">Critical</button>
+          </div>
+        </div>
+        <div class="input-group">
+          <label for="unsafeDescription">Details</label>
+          <textarea id="unsafeDescription" placeholder="Optional details..." rows="3"></textarea>
+        </div>
+        <button id="submitUnsafeBtn" class="btn-primary">Submit Safety Report</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Trip Summary / Confirm Arrival -->
+  <div id="arrivalReviewModal" class="modal-overlay arrival-modal" style="display:none">
+    <div class="modal-card arrival-card">
+      <button type="button" class="arrival-close close-btn" onclick="closeArrivalReviewModal()">&times;</button>
+      <div class="arrival-hero">
+        <div class="arrival-confetti" aria-hidden="true"></div>
+        <div class="arrival-check"><i class="fa-solid fa-check"></i></div>
+        <h2>You have reached your destination!</h2>
+      </div>
+      <div class="arrival-stats">
+        <div class="arrival-stat">
+          <span class="arrival-stat-label">Distance Travelled</span>
+          <strong id="arrivalDistance" class="arrival-stat-value">--</strong>
+        </div>
+        <div class="arrival-stat">
+          <span class="arrival-stat-label">Average Safety Score</span>
+          <strong id="arrivalSafetyScore" class="arrival-stat-value">--</strong>
+        </div>
+        <div class="arrival-stat">
+          <span class="arrival-stat-label">Route Taken</span>
+          <strong id="arrivalRouteName" class="arrival-stat-value">--</strong>
+        </div>
+      </div>
+      <div class="arrival-rating-block">
+        <h3>Rate Your Experience</h3>
+        <div id="arrivalStarRow" class="star-rating" role="radiogroup" aria-label="Trip safety rating">
+          <button type="button" class="star-btn" data-rating="1" aria-label="1 star">★</button>
+          <button type="button" class="star-btn" data-rating="2" aria-label="2 stars">★</button>
+          <button type="button" class="star-btn" data-rating="3" aria-label="3 stars">★</button>
+          <button type="button" class="star-btn" data-rating="4" aria-label="4 stars">★</button>
+          <button type="button" class="star-btn" data-rating="5" aria-label="5 stars">★</button>
+        </div>
+        <p id="arrivalRatingHint" class="rating-hint">Tap a star to rate</p>
+        <button type="button" id="submitArrivalReviewBtn" class="btn-primary" onclick="submitArrivalReview()">Confirm Safe Arrival</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet.heat/dist/leaflet-heat.js"></script>
+  <script src="origin.js"></script>
+  <script src="features/api.js"></script>
+  <script src="features/safetyStatus.js"></script>
+  <script src="features/deviation.js"></script>
+  <script src="features/routeCompare.js"></script>
+  <script src="features/heatmap.js"></script>
+  <script src="features/demo.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

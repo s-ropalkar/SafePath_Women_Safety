@@ -1,0 +1,36 @@
+# # Secrets — never commit
+# safepath/config/app.properties
+
+# # Build output
+# safepath/out/
+# *.class
+
+# # IDE
+# .idea/
+# *.iml
+# .vscode/*.log
+
+# # OS
+# .DS_Store
+# Thumbs.db
+
+# # Logs
+# *.log
+# Secrets — never commit
+safepath/config/app.properties
+
+# Build output
+safepath/out/
+*.class
+
+# IDE
+.vscode/
+.idea/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
