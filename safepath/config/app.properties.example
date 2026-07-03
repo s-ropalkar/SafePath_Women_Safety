@@ -1,6 +1,7 @@
 # SafePath configuration — copy to app.properties (gitignored) or use environment variables.
-# NEVER commit real passwords. Prefer env vars in production:
-#   SAFEPATH_SMTP_PASS, SAFEPATH_MYSQL_PASSWORD, SAFEPATH_GOOGLE_CLIENT_ID
+# NEVER commit real passwords. Prefer env vars in production (Render, etc.):
+#   SAFEPATH_MYSQL_HOST, SAFEPATH_MYSQL_PORT, SAFEPATH_MYSQL_USER, SAFEPATH_MYSQL_PASSWORD
+#   SAFEPATH_SMTP_PASS, SAFEPATH_GOOGLE_CLIENT_ID, SAFEPATH_APP_BASE_URL
 
 smtp.host=smtp.gmail.com
 smtp.port=587
@@ -12,9 +13,13 @@ smtp.ssl=false
 google.client.id=
 
 server.port=8080
+# app.base.url=https://your-app.onrender.com/
 
-mysql.host=localhost
-mysql.port=3306
+# TiDB Cloud (MySQL-compatible) — local MySQL: set mysql.host=localhost mysql.port=3306 mysql.sslMode=DISABLED
+mysql.host=gateway01.ap-southeast-1.prod.aws.tidbcloud.com
+mysql.port=4000
 mysql.database=safepath
-mysql.user=root
-mysql.password=your-mysql-password
+mysql.user=your-tidb-user
+mysql.password=your-tidb-password
+mysql.sslMode=REQUIRED
+mysql.autoCreateDatabase=false

@@ -987,7 +987,9 @@ public class Server {
       Path filePath = frontendDir.resolve(path.substring(1)).normalize();
       if (!filePath.startsWith(frontendDir) || !Files.isRegularFile(filePath)) {
         String notFound = "404 Not Found: " + path
-            + "\n\nStart server from safepath/ and open http://localhost:" + port + "/\n"
+            + "\n\nBuild with Maven and run from safepath/:\n"
+            + "  ./mvnw clean package && java -jar target/safepath-1.0.0.jar\n"
+            + "Open http://localhost:" + port + "/\n"
             + "Do not open index.html with Live Server.";
         byte[] bytes = notFound.getBytes();
         exchange.getResponseHeaders().set("Content-Type", "text/plain; charset=UTF-8");
@@ -1265,8 +1267,11 @@ public class Server {
     }
 
     try {
+      Path configFile = AppConfig.loadedConfigFile();
       System.out.println("SafePath root: " + AppPaths.root().toAbsolutePath());
-      System.out.println("MySQL: " + AppConfig.mysqlHost() + ":" + AppConfig.mysqlPort() + "/" + AppConfig.mysqlDatabase());
+      AppConfig.logMysqlConfigSources(configFile);
+      System.out.println("MySQL: " + AppConfig.mysqlHost() + ":" + AppConfig.mysqlPort()
+          + "/" + AppConfig.mysqlDatabase());
       server.db.Database.get();
       System.out.println("MySQL: connected");
       System.out.println("SMTP: " + (EmailService.isSmtpConfigured() ? "configured" : "not configured (outbox only)"));
@@ -1278,15 +1283,15 @@ public class Server {
       String msg = String.valueOf(e.getMessage());
       if (msg.contains("Address already in use") || msg.contains("bind")) {
         System.err.println("ERROR: Port " + port + " is already in use.");
-        System.err.println("Stop the other process or run: java -cp \"out;lib/*\" server.Server " + (port + 1));
+        System.err.println("Stop the other process or run: java -jar target/safepath-1.0.0.jar " + (port + 1));
       } else {
         System.err.println("ERROR: " + e.getMessage());
       }
       System.exit(1);
     } catch (java.sql.SQLException e) {
-      System.err.println("ERROR: MySQL connection failed — " + e.getMessage());
+      System.err.println("ERROR: Database connection failed — " + e.getMessage());
       System.err.println("Edit safepath/config/app.properties (mysql.host, mysql.user, mysql.password)");
-      System.err.println("Ensure MySQL is running, then restart the server.");
+      System.err.println("TiDB Cloud example: mysql.host=gateway01.ap-southeast-1.prod.aws.tidbcloud.com mysql.port=4000");
       System.exit(1);
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();

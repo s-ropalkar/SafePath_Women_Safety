@@ -1,27 +1,13 @@
-# # Secrets — never commit
-# safepath/config/app.properties
-
-# # Build output
-# safepath/out/
-# *.class
-
-# # IDE
-# .idea/
-# *.iml
-# .vscode/*.log
-
-# # OS
-# .DS_Store
-# Thumbs.db
-
-# # Logs
-# *.log
 # Secrets — never commit
 safepath/config/app.properties
 
-# Build output
+# Maven build output
+safepath/target/
 safepath/out/
+
+# Legacy non-Maven artifacts
 *.class
+safepath/lib/
 
 # IDE
 .vscode/

@@ -15,11 +15,6 @@ public class Database {
   private static Database instance;
 
   private Database() throws SQLException {
-    try {
-      Class.forName("com.mysql.cj.jdbc.Driver");
-    } catch (ClassNotFoundException e) {
-      throw new SQLException("MySQL JDBC driver not found. Add lib/mysql-connector-j.jar to the classpath.", e);
-    }
     initSchema();
   }
 
@@ -31,54 +26,55 @@ public class Database {
   }
 
   private void initSchema() throws SQLException {
-    String host = AppConfig.mysqlHost();
-    int port = AppConfig.mysqlPort();
     String dbName = AppConfig.mysqlDatabase();
     String user = AppConfig.mysqlUser();
     String pass = AppConfig.mysqlPassword();
 
-    String serverUrl = "jdbc:mysql://" + host + ":" + port
-        + "/?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC";
-    try (Connection conn = DriverManager.getConnection(serverUrl, user, pass);
-         Statement st = conn.createStatement()) {
-      st.executeUpdate("CREATE DATABASE IF NOT EXISTS `" + dbName
-          + "` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
+    if (AppConfig.mysqlAutoCreateDatabase()) {
+      try (Connection conn = DriverManager.getConnection(
+              AppConfig.mysqlServerJdbcUrl(), user, pass);
+           Statement st = conn.createStatement()) {
+        st.executeUpdate("CREATE DATABASE IF NOT EXISTS `" + dbName
+            + "` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
+      } catch (SQLException e) {
+        System.err.println("[Database] CREATE DATABASE skipped (TiDB Cloud may pre-provision): "
+            + e.getMessage());
+      }
     }
 
     try (Connection conn = openConnection();
          Statement st = conn.createStatement()) {
+      if (!AppConfig.mysqlAutoCreateDatabase()) {
+        repairImportedSchema(st);
+      }
       st.executeUpdate("""
           CREATE TABLE IF NOT EXISTS users (
-            id VARCHAR(36) PRIMARY KEY,
+            id VARCHAR(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin PRIMARY KEY,
             name VARCHAR(255) NOT NULL,
             email VARCHAR(255) NOT NULL UNIQUE,
             salt VARCHAR(64) NOT NULL,
             password_hash VARCHAR(128) NOT NULL,
             created_at BIGINT NOT NULL
-          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin
           """);
       st.executeUpdate("""
           CREATE TABLE IF NOT EXISTS guardians (
-            id VARCHAR(36) PRIMARY KEY,
-            user_id VARCHAR(36) NOT NULL,
+            id VARCHAR(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin PRIMARY KEY,
+            user_id VARCHAR(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
             name VARCHAR(255) NOT NULL,
             phone VARCHAR(64) NOT NULL DEFAULT '',
             email VARCHAR(255) NOT NULL DEFAULT '',
             created_at BIGINT NOT NULL,
-            INDEX idx_guardians_user (user_id),
-            CONSTRAINT fk_guardians_user FOREIGN KEY (user_id)
-              REFERENCES users(id) ON DELETE CASCADE
-          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            INDEX idx_guardians_user (user_id)
+          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin
           """);
       st.executeUpdate("""
           CREATE TABLE IF NOT EXISTS auth_tokens (
             token VARCHAR(64) PRIMARY KEY,
-            user_id VARCHAR(36) NOT NULL,
+            user_id VARCHAR(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
             created_at BIGINT NOT NULL,
-            INDEX idx_tokens_user (user_id),
-            CONSTRAINT fk_tokens_user FOREIGN KEY (user_id)
-              REFERENCES users(id) ON DELETE CASCADE
-          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            INDEX idx_tokens_user (user_id)
+          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin
           """);
       st.executeUpdate("""
           CREATE TABLE IF NOT EXISTS email_outbox (
@@ -105,17 +101,15 @@ public class Database {
       st.executeUpdate("""
           CREATE TABLE IF NOT EXISTS password_reset_tokens (
             token VARCHAR(64) PRIMARY KEY,
-            user_id VARCHAR(36) NOT NULL,
+            user_id VARCHAR(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
             expires_at BIGINT NOT NULL,
-            INDEX idx_reset_user (user_id),
-            CONSTRAINT fk_reset_user FOREIGN KEY (user_id)
-              REFERENCES users(id) ON DELETE CASCADE
-          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            INDEX idx_reset_user (user_id)
+          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin
           """);
       st.executeUpdate("""
           CREATE TABLE IF NOT EXISTS trip_history (
-            id VARCHAR(36) PRIMARY KEY,
-            user_id VARCHAR(36) NOT NULL,
+            id VARCHAR(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin PRIMARY KEY,
+            user_id VARCHAR(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
             session_id VARCHAR(64),
             source_label VARCHAR(512) NOT NULL DEFAULT '',
             dest_label VARCHAR(512) NOT NULL DEFAULT '',
@@ -124,15 +118,13 @@ public class Database {
             route_type VARCHAR(32) NOT NULL DEFAULT 'balanced',
             rating INT NOT NULL DEFAULT 0,
             completed_at BIGINT NOT NULL,
-            INDEX idx_trip_history_user (user_id),
-            CONSTRAINT fk_trip_history_user FOREIGN KEY (user_id)
-              REFERENCES users(id) ON DELETE CASCADE
-          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            INDEX idx_trip_history_user (user_id)
+          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin
           """);
       st.executeUpdate("""
           CREATE TABLE IF NOT EXISTS user_unsafe_reports (
-            id VARCHAR(36) PRIMARY KEY,
-            user_id VARCHAR(36) NOT NULL,
+            id VARCHAR(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin PRIMARY KEY,
+            user_id VARCHAR(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
             latitude DOUBLE NOT NULL,
             longitude DOUBLE NOT NULL,
             category VARCHAR(128) NOT NULL DEFAULT '',
@@ -140,12 +132,27 @@ public class Database {
             description TEXT,
             reason VARCHAR(255) NOT NULL DEFAULT '',
             created_at BIGINT NOT NULL,
-            INDEX idx_user_unsafe_user (user_id),
-            CONSTRAINT fk_user_unsafe_user FOREIGN KEY (user_id)
-              REFERENCES users(id) ON DELETE CASCADE
-          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            INDEX idx_user_unsafe_user (user_id)
+          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin
           """);
       System.out.println("MySQL schema ready (users, guardians, trip_history, user_unsafe_reports, …)");
+    }
+  }
+
+  /** TiDB/MySQL dumps may import FKs with incompatible collations — recreate child tables. */
+  private void repairImportedSchema(Statement st) throws SQLException {
+    String[] childTables = {
+        "user_unsafe_reports", "trip_history", "password_reset_tokens",
+        "auth_tokens", "guardians"
+    };
+    try {
+      st.execute("SET FOREIGN_KEY_CHECKS=0");
+      for (String table : childTables) {
+        st.executeUpdate("DROP TABLE IF EXISTS `" + table + "`");
+      }
+      System.out.println("[Database] Recreated TiDB-compatible child tables (no legacy FKs)");
+    } finally {
+      st.execute("SET FOREIGN_KEY_CHECKS=1");
     }
   }
 

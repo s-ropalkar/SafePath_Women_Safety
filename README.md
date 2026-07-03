@@ -6,7 +6,8 @@
 
 **Plan safer routes. Track live journeys. Alert guardians in real time.**
 
-[![Java](https://img.shields.io/badge/Java-11+-orange?logo=openjdk&logoColor=white)](https://openjdk.org/)
+[![Java](https://img.shields.io/badge/Java-17-orange?logo=openjdk&logoColor=white)](https://openjdk.org/)
+[![Maven](https://img.shields.io/badge/Maven-3.9+-red?logo=apachemaven&logoColor=white)](https://maven.apache.org/)
 [![MySQL](https://img.shields.io/badge/MySQL-8+-blue?logo=mysql&logoColor=white)](https://www.mysql.com/)
 [![Leaflet](https://img.shields.io/badge/Leaflet-Maps-green?logo=leaflet&logoColor=white)](https://leafletjs.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-purple.svg)](LICENSE)
@@ -78,8 +79,8 @@ There is **no dependency on official NCRB/police crime datasets** at launch. Saf
 
 | Layer | Technologies |
 |-------|--------------|
-| **Backend** | Java 11, `com.sun.net.httpserver`, JDBC |
-| **Database** | MySQL 8 (users, guardians, unsafe zones, trips, email queue) |
+| **Backend** | Java 17, Maven, `com.sun.net.httpserver`, JDBC |
+| **Database** | TiDB Cloud / MySQL 8 (mysql-connector-j 9.4.0 via Maven) |
 | **Frontend** | HTML5, CSS3, Vanilla JavaScript |
 | **Maps** | [Leaflet.js](https://leafletjs.com/), Leaflet.heat |
 | **Routing** | [OSRM](http://project-osrm.org/) (road geometry & alternatives) |
@@ -186,48 +187,34 @@ nodeSafety = baseScore
 ```
 safepath_realtime_fixed/
 ├── README.md                          ← You are here
+├── render.yaml                        ← Render.com deployment blueprint
 ├── START-SAFEPATH.bat                 ← Quick launcher (Windows)
 ├── .vscode/                           ← VS Code tasks & launch configs
 │
 └── safepath/
+    ├── pom.xml                        ← Maven build (Java 17, fat JAR)
     ├── config/
     │   ├── app.properties.example     ← Config template (copy to app.properties)
     │   └── app.properties             ← Local secrets (gitignored)
     │
-    ├── lib/
-    │   └── mysql-connector-j.jar
-    │
-    ├── src/server/
+    ├── src/main/java/server/          ← Java source (Maven standard layout)
     │   ├── Server.java                ← HTTP server & all API routes
-    │   ├── db/Database.java           ← MySQL schema & queries
-    │   ├── core/
-    │   │   ├── PathEngine.java        ← Dijkstra shortest / safest
-    │   │   ├── AStarEngine.java       ← A* balanced routing
-    │   │   ├── YenPathFinder.java     ← K-shortest paths
-    │   │   ├── RouteAnalyzer.java     ← Orchestrates 3 route picks
-    │   │   ├── SafetyEngine.java      ← POI + community safety scoring
-    │   │   ├── SafetyInsight.java     ← XAI analysis DTO
-    │   │   └── ReportValidator.java   ← Community report anomaly AI
-    │   ├── graph/                     ← Node, Edge, Graph, GraphUtils
-    │   ├── models/                    ← GraphBuilder, UserSession, UnsafeLocation
-    │   ├── store/                     ← SessionStore, UnsafeStore
-    │   ├── services/                  ← Auth, Guardian, Email, Alerts
-    │   └── util/                      ← JsonUtil, AppConfig, PoiFetcher
+    │   ├── db/Database.java           ← TiDB/MySQL schema & queries
+    │   ├── core/                      ← Routing engines, SafetyEngine, XAI
+    │   ├── graph/
+    │   ├── models/
+    │   ├── store/
+    │   ├── services/
+    │   └── util/                      ← AppConfig, AppPaths, JsonUtil
     │
-    ├── frontend/
-    │   ├── index.html                 ← Main navigation app
-    │   ├── login.html / guardian.html / reset-password.html
-    │   ├── app.js                     ← Core app logic, GPS, SOS, tracking
-    │   ├── styles.css                 ← Premium purple theme
-    │   └── features/
-    │       ├── routeCompare.js        ← Route cards + XAI display
-    │       ├── heatmap.js             ← Community unsafe zones
-    │       ├── safetyStatus.js        ← Live score + XAI panel
-    │       ├── demo.js                ← One-click judge demo
-    │       └── deviation.js           ← Route deviation detection
+    ├── frontend/                      ← Static HTML/CSS/JS (served by Server)
+    │   ├── index.html, app.js, styles.css
+    │   └── features/                  ← heatmap, routeCompare, demo, …
     │
-    ├── run.bat / run.ps1 / run.sh     ← Build & run scripts
-    └── out/                           ← Compiled .class files (gitignored)
+    ├── target/                        ← Maven build output (gitignored)
+    │   └── safepath-1.0.0.jar         ← Executable fat JAR (all deps bundled)
+    │
+    └── run.bat / run.ps1 / run.sh     ← Maven build + run scripts
 ```
 
 ---
@@ -238,8 +225,9 @@ safepath_realtime_fixed/
 
 | Requirement | Version |
 |-------------|---------|
-| Java JDK | 11 or higher |
-| MySQL | 8.0 or higher |
+| Java JDK | **17** or higher |
+| Apache Maven | 3.9+ |
+| Database | **TiDB Cloud** or MySQL 8.0+ |
 | Browser | Chrome / Edge / Firefox (modern) |
 | Internet | Required for OSRM, OSM tiles, Overpass POIs |
 
@@ -250,23 +238,21 @@ safepath_realtime_fixed/
 git clone https://github.com/RiddhiRopalkar/SafePath_Women_Safety.git
 cd SafePath_Women_Safety/safepath
 
-# 2. Ensure MySQL is running (default port 3306)
-
-# 3. Copy configuration template
+# 2. Copy configuration template
 cp config/app.properties.example config/app.properties   # Linux/macOS
 # copy config\app.properties.example config\app.properties   # Windows
 
-# 4. Edit config/app.properties — set mysql.password at minimum
+# 3. Edit config/app.properties — set TiDB/MySQL host, user, password
 
-# 5. Compile
-javac -cp "lib/*" -d out -sourcepath src src/server/Server.java
+# 4. Build with Maven (wrapper included — no global Maven install required)
+./mvnw clean package          # Linux/macOS
+# mvnw.cmd clean package      # Windows
 
-# 6. Run
-java -cp "out;lib/*" server.Server        # Windows
-java -cp "out:lib/*" server.Server        # Linux/macOS
+# 5. Run
+java -jar target/safepath-1.0.0.jar
 ```
 
-The server auto-creates the `safepath` database and all tables on first startup.
+On first startup the server creates all required tables. For **TiDB Cloud**, set `mysql.autoCreateDatabase=false` (database is pre-provisioned).
 
 ---
 
@@ -274,17 +260,41 @@ The server auto-creates the `safepath` database and all tables on first startup.
 
 Copy `safepath/config/app.properties.example` → `safepath/config/app.properties` (never commit real passwords).
 
-### MySQL (required)
+### TiDB Cloud (production)
 
 ```properties
-mysql.host=localhost
-mysql.port=3306
+mysql.host=gateway01.ap-southeast-1.prod.aws.tidbcloud.com
+mysql.port=4000
 mysql.database=safepath
-mysql.user=root
-mysql.password=your-mysql-password
+mysql.user=your-tidb-user
+mysql.password=your-tidb-password
+mysql.sslMode=REQUIRED
+mysql.autoCreateDatabase=false
 ```
 
-Environment override: `SAFEPATH_MYSQL_PASSWORD`, `SAFEPATH_MYSQL_HOST`, etc.
+JDBC URL format used internally:
+
+```
+jdbc:mysql://HOST:PORT/DATABASE?sslMode=REQUIRED&serverTimezone=UTC
+```
+
+### Local MySQL (development)
+
+```properties
+mysql.host=gateway01.ap-southeast-1.prod.aws.tidbcloud.com
+mysql.port=4000
+mysql.database=safepath
+mysql.user=2aLhSpk2aZmebUg.root
+mysql.password=YOUR_TIDB_PASSWORD
+
+
+mysql.sslMode=REQUIRED
+mysql.autoCreateDatabase=true
+```
+
+**Environment overrides** (recommended on Render): `SAFEPATH_MYSQL_HOST`, `SAFEPATH_MYSQL_PORT`, `SAFEPATH_MYSQL_DATABASE`, `SAFEPATH_MYSQL_USER`, `SAFEPATH_MYSQL_PASSWORD`, `SAFEPATH_MYSQL_SSL_MODE`
+
+**Project root override** (when cwd differs): `SAFEPATH_ROOT=/path/to/safepath`
 
 ### SMTP email (optional — guardian alerts)
 
@@ -316,19 +326,47 @@ server.port=8080
 
 ## ▶️ Run
 
-> **Important:** Do **not** use VS Code Live Server (port 5503). The app must be served by the Java backend on port **8080**.
+> **Important:** Do **not** use VS Code Live Server (port 5503). The app must be served by the Java backend.
 
-| Method | Command |
-|--------|---------|
-| **Windows — double-click** | `safepath/run.bat` or `START-SAFEPATH.bat` |
-| **PowerShell** | `.\safepath\run.ps1` |
-| **Linux / macOS** | `./safepath/run.sh` |
-| **VS Code** | Run task **SafePath: Run Server (port 8080)** or F5 |
-| **Manual** | See [Installation](#-installation) |
+### Build
+
+```bash
+cd safepath
+mvn clean package
+```
+
+### Run locally
+
+```bash
+cd safepath
+java -jar target/safepath-1.0.0.jar
+```
 
 Open: **http://localhost:8080/**
 
+| Method | Command |
+|--------|---------|
+| **Maven + JAR** | `./mvnw clean package && java -jar target/safepath-1.0.0.jar` |
+| **Windows — double-click** | `safepath/run.bat` or `START-SAFEPATH.bat` |
+| **PowerShell** | `.\safepath\run.ps1` |
+| **Linux / macOS** | `./safepath/run.sh` |
+| **VS Code** | Task **safepath: run server** or F5 |
+
 Health check: `http://localhost:8080/health`
+
+### Deploy on Render
+
+1. Push repo to GitHub.
+2. Create a **Web Service** on [Render](https://render.com) and connect the repo.
+3. Use `render.yaml` or set manually:
+   - **Build command:** `cd safepath && ./mvnw clean package -DskipTests`
+   - **Start command:** `cd safepath && java -jar target/safepath-1.0.0.jar`
+4. Add environment variables:
+   - `SAFEPATH_MYSQL_HOST`, `SAFEPATH_MYSQL_PORT` (`4000`), `SAFEPATH_MYSQL_USER`, `SAFEPATH_MYSQL_PASSWORD`
+   - `SAFEPATH_MYSQL_SSL_MODE=REQUIRED`
+   - `SAFEPATH_ROOT` → absolute path to `safepath` folder on Render (e.g. `/opt/render/project/src/safepath`)
+   - Optional: `SAFEPATH_SMTP_*`, `SAFEPATH_APP_BASE_URL`, `SAFEPATH_GOOGLE_CLIENT_ID`
+5. Render sets `PORT` automatically — the server reads it via `AppConfig.serverPort()`.
 
 ---
 

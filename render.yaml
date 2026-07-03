@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: safepath-ai
+    runtime: java
+    region: singapore
+    plan: free
+    buildCommand: cd safepath && ./mvnw clean package -DskipTests
+    startCommand: cd safepath && java -jar target/safepath-1.0.0.jar
+    envVars:
+      - key: SAFEPATH_MYSQL_HOST
+        sync: false
+      - key: SAFEPATH_MYSQL_PORT
+        value: "4000"
+      - key: SAFEPATH_MYSQL_DATABASE
+        value: safepath
+      - key: SAFEPATH_MYSQL_USER
+        sync: false
+      - key: SAFEPATH_MYSQL_PASSWORD
+        sync: false
+      - key: SAFEPATH_MYSQL_SSL_MODE
+        value: REQUIRED
+      - key: SAFEPATH_SMTP_HOST
+        sync: false
+      - key: SAFEPATH_SMTP_USER
+        sync: false
+      - key: SAFEPATH_SMTP_PASS
+        sync: false
+      - key: SAFEPATH_ROOT
+        value: /opt/render/project/src/safepath
