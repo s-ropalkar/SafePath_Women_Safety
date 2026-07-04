@@ -1,12 +1,17 @@
+# Render Blueprint — Docker deployment (Root Directory: safepath in dashboard)
 services:
   - type: web
     name: safepath-ai
-    runtime: java
+    runtime: docker
     region: singapore
     plan: free
-    buildCommand: cd safepath && ./mvnw clean package -DskipTests
-    startCommand: cd safepath && java -jar target/safepath-1.0.0.jar
+    rootDir: safepath
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
     envVars:
+      - key: SAFEPATH_ROOT
+        value: /app
       - key: SAFEPATH_MYSQL_HOST
         sync: false
       - key: SAFEPATH_MYSQL_PORT
@@ -25,5 +30,5 @@ services:
         sync: false
       - key: SAFEPATH_SMTP_PASS
         sync: false
-      - key: SAFEPATH_ROOT
-        value: /opt/render/project/src/safepath
+      - key: SAFEPATH_APP_BASE_URL
+        sync: false

@@ -4,6 +4,7 @@ safepath/config/app.properties
 # Maven build output
 safepath/target/
 safepath/out/
+safepath/effective-pom.xml
 
 # Legacy non-Maven artifacts
 *.class

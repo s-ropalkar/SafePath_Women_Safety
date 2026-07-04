@@ -354,19 +354,30 @@ Open: **http://localhost:8080/**
 
 Health check: `http://localhost:8080/health`
 
-### Deploy on Render
+### Deploy on Render (Docker — recommended)
 
 1. Push repo to GitHub.
 2. Create a **Web Service** on [Render](https://render.com) and connect the repo.
-3. Use `render.yaml` or set manually:
-   - **Build command:** `cd safepath && ./mvnw clean package -DskipTests`
-   - **Start command:** `cd safepath && java -jar target/safepath-1.0.0.jar`
-4. Add environment variables:
+3. Set **Root Directory** to `safepath`.
+4. Set **Runtime** to **Docker** (uses `safepath/Dockerfile` automatically), or apply the repo-root `render.yaml` blueprint.
+5. Add environment variables in the Render dashboard:
    - `SAFEPATH_MYSQL_HOST`, `SAFEPATH_MYSQL_PORT` (`4000`), `SAFEPATH_MYSQL_USER`, `SAFEPATH_MYSQL_PASSWORD`
    - `SAFEPATH_MYSQL_SSL_MODE=REQUIRED`
-   - `SAFEPATH_ROOT` → absolute path to `safepath` folder on Render (e.g. `/opt/render/project/src/safepath`)
+   - `SAFEPATH_ROOT=/app` (set automatically in `render.yaml` for Docker)
    - Optional: `SAFEPATH_SMTP_*`, `SAFEPATH_APP_BASE_URL`, `SAFEPATH_GOOGLE_CLIENT_ID`
-5. Render sets `PORT` automatically — the server reads it via `AppConfig.serverPort()`.
+6. Render sets `PORT` and `RENDER_EXTERNAL_URL` automatically — the server reads them via `AppConfig`.
+
+**Do not** use the old Java native runtime build command (`./mvnw clean package`) on Render — Docker builds inside the container with `mvn clean package` and no local stop-server hooks.
+
+### Deploy on Render (Java native — legacy)
+
+If not using Docker, build with:
+
+```bash
+cd safepath && ./mvnw package -DskipTests
+```
+
+Avoid `clean` on Render native runtime unless no server is locking the JAR.
 
 ---
 
