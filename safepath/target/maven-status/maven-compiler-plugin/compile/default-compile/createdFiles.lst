@@ -1,4 +1,5 @@
 server\models\GraphBuilder.class
+server\Server$ValidateResetTokenHandler.class
 server\Server$UnsafeLocationsHandler.class
 server\services\EmailService$SmtpClient.class
 server\Server$StartTrackingHandler.class

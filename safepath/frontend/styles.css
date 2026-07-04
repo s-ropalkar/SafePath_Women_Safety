@@ -963,8 +963,22 @@ button:active { transform: scale(0.98); }
 .map-badge.metro { background: #0891B2; }
 .map-badge.bus { background: var(--success); }
 
+.map-badge--active {
+  width: 32px;
+  height: 32px;
+  font-size: 13px;
+  font-weight: 900;
+  border: 3px solid #fff;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.65), 0 4px 16px rgba(15, 23, 42, 0.45);
+}
+
+.poi-marker-wrap--active {
+  z-index: 1200 !important;
+}
+
 .poi-marker-wrap,
-.route-pin-wrap {
+.route-pin-wrap,
+.leaflet-div-icon.poi-marker-wrap {
   background: transparent !important;
   border: none !important;
 }
@@ -1783,6 +1797,14 @@ body:has(#toggleHeatmapBtn.heatmap-on) .heatmap-state--on { display: inline-bloc
 .nav-checkpoint {
   font-size: 12px !important;
   padding: 8px 12px !important;
+  transition: background 0.15s, border-color 0.15s, font-weight 0.15s;
+}
+
+.nav-checkpoint.active {
+  font-weight: 800 !important;
+  background: rgba(99, 102, 241, 0.14) !important;
+  border-left: 3px solid var(--primary) !important;
+  padding-left: 9px !important;
 }
 
 /* Heatmap popover on map */

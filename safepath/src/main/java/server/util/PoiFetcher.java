@@ -12,7 +12,7 @@ public final class PoiFetcher {
   public static List<Map<String, Object>> fetch(double south, double west, double north, double east)
       throws IOException {
     String bbox = south + "," + west + "," + north + "," + east;
-    String query = "[out:json][timeout:15];"
+    String query = "[out:json][timeout:25];"
         + "("
         + "node[amenity=police](" + bbox + ");"
         + "node[amenity=hospital](" + bbox + ");"
@@ -24,17 +24,33 @@ public final class PoiFetcher {
         + ");"
         + "out body;";
 
-    String json = postOverpass(query);
-    return parseElements(json);
+    IOException lastError = null;
+    for (String endpoint : OVERPASS_ENDPOINTS) {
+      try {
+        String json = postOverpass(endpoint, query);
+        List<Map<String, Object>> pois = parseElements(json, south, west, north, east);
+        if (!pois.isEmpty()) return pois;
+      } catch (IOException e) {
+        lastError = e;
+        System.err.println("[PoiFetcher] " + endpoint + ": " + e.getMessage());
+      }
+    }
+    if (lastError != null) throw lastError;
+    return List.of();
   }
 
-  private static String postOverpass(String query) throws IOException {
-    URL url = new URL("https://overpass-api.de/api/interpreter");
+  private static final String[] OVERPASS_ENDPOINTS = {
+      "https://overpass-api.de/api/interpreter",
+      "https://overpass.kumi.systems/api/interpreter",
+  };
+
+  private static String postOverpass(String endpoint, String query) throws IOException {
+    URL url = new URL(endpoint);
     HttpURLConnection conn = (HttpURLConnection) url.openConnection();
     conn.setRequestMethod("POST");
     conn.setDoOutput(true);
-    conn.setConnectTimeout(10000);
-    conn.setReadTimeout(15000);
+    conn.setConnectTimeout(15000);
+    conn.setReadTimeout(25000);
     conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
 
     String body = "data=" + URLEncoder.encode(query, "UTF-8");
@@ -61,25 +77,40 @@ public final class PoiFetcher {
     }
   }
 
-  private static List<Map<String, Object>> parseElements(String json) {
+  /** Parse Overpass "elements" array — only type=node with lat/lon inside the route bbox. */
+  private static List<Map<String, Object>> parseElements(
+      String json, double south, double west, double north, double east) {
     List<Map<String, Object>> out = new ArrayList<>();
-    int idx = 0;
-    while (true) {
-      int latIdx = json.indexOf("\"lat\":", idx);
-      if (latIdx < 0) break;
-      int lonIdx = json.indexOf("\"lon\":", latIdx);
-      if (lonIdx < 0) break;
+    int elementsIdx = json.indexOf("\"elements\"");
+    if (elementsIdx < 0) return out;
+    int arrStart = json.indexOf('[', elementsIdx);
+    if (arrStart < 0) return out;
+    int arrEnd = matchingClose(json, arrStart);
+    if (arrEnd <= arrStart) return out;
 
-      double lat = readDouble(json, latIdx + 6);
-      double lon = readDouble(json, lonIdx + 6);
+    String arrBody = json.substring(arrStart + 1, arrEnd);
+    int pos = 0;
+    while (pos < arrBody.length()) {
+      int objStart = arrBody.indexOf('{', pos);
+      if (objStart < 0) break;
+      int objEnd = matchingClose(arrBody, objStart);
+      if (objEnd < 0) break;
 
-      int tagStart = json.lastIndexOf("{", latIdx);
-      int tagEnd = json.indexOf("}", lonIdx);
-      String chunk = (tagStart >= 0 && tagEnd > tagStart)
-          ? json.substring(tagStart, tagEnd) : "";
+      String el = arrBody.substring(objStart, objEnd + 1);
+      pos = objEnd + 1;
 
-      String type = classifyType(chunk);
-      String name = extractTag(chunk, "name");
+      if (!el.contains("\"type\":\"node\"") && !el.contains("\"type\": \"node\"")) continue;
+
+      Double lat = extractJsonNumber(el, "lat");
+      Double lon = extractJsonNumber(el, "lon");
+      if (lat == null || lon == null) continue;
+      if (Math.abs(lat) > 90 || Math.abs(lon) > 180) continue;
+      if (lat < south || lat > north || lon < west || lon > east) continue;
+
+      String type = classifyTypeFromTags(el);
+      if (type == null) continue;
+
+      String name = extractTagValue(el, "name");
       if (name.isEmpty()) name = "Unnamed safe spot";
 
       Map<String, Object> row = new LinkedHashMap<>();
@@ -88,39 +119,83 @@ public final class PoiFetcher {
       row.put("type", type);
       row.put("name", name);
       out.add(row);
-      idx = lonIdx + 6;
     }
     return out;
   }
 
-  private static String classifyType(String chunk) {
-    if (chunk.contains("\"police\"")) return "police";
-    if (chunk.contains("\"hospital\"")) return "hospital";
-    if (chunk.contains("\"hostel\"")) return "hostel";
-    if (chunk.contains("\"hotel\"")) return "hotel";
-    if (chunk.contains("bus_stop")) return "bus";
-    if (chunk.contains("\"station\"")) return "metro";
-    return "hotel";
+  private static String classifyTypeFromTags(String el) {
+    if (tagEquals(el, "amenity", "police")) return "police";
+    if (tagEquals(el, "amenity", "hospital")) return "hospital";
+    if (tagEquals(el, "amenity", "hostel")) return "hostel";
+    if (tagEquals(el, "amenity", "hotel") || tagEquals(el, "tourism", "hotel")) return "hotel";
+    if (tagEquals(el, "highway", "bus_stop")) return "bus";
+    if (tagEquals(el, "railway", "station")) return "metro";
+    return null;
   }
 
-  private static String extractTag(String chunk, String key) {
-    String needle = "\"" + key + "\":\"";
-    int i = chunk.indexOf(needle);
-    if (i < 0) return "";
-    int start = i + needle.length();
-    int end = chunk.indexOf('"', start);
-    if (end < 0) return "";
-    return chunk.substring(start, end);
+  private static boolean tagEquals(String el, String key, String value) {
+    return el.contains("\"" + key + "\":\"" + value + "\"")
+        || el.contains("\"" + key + "\": \"" + value + "\"");
   }
 
-  private static double readDouble(String s, int start) {
-    int end = start;
-    while (end < s.length() && (Character.isDigit(s.charAt(end))
-        || s.charAt(end) == '.' || s.charAt(end) == '-')) end++;
-    try {
-      return Double.parseDouble(s.substring(start, end));
-    } catch (NumberFormatException e) {
-      return 0;
+  private static String extractTagValue(String el, String key) {
+    String[] patterns = {
+        "\"" + key + "\":\"",
+        "\"" + key + "\": \""
+    };
+    for (String needle : patterns) {
+      int i = el.indexOf(needle);
+      if (i < 0) continue;
+      int start = i + needle.length();
+      int end = el.indexOf('"', start);
+      if (end > start) return el.substring(start, end);
     }
+    return "";
+  }
+
+  private static Double extractJsonNumber(String json, String key) {
+    String[] patterns = { "\"" + key + "\":", "\"" + key + "\": " };
+    for (String needle : patterns) {
+      int i = json.indexOf(needle);
+      if (i < 0) continue;
+      int start = i + needle.length();
+      while (start < json.length() && Character.isWhitespace(json.charAt(start))) start++;
+      int end = start;
+      while (end < json.length()) {
+        char c = json.charAt(end);
+        if (Character.isDigit(c) || c == '.' || c == '-' || c == 'e' || c == 'E' || c == '+') {
+          end++;
+        } else {
+          break;
+        }
+      }
+      try {
+        return Double.parseDouble(json.substring(start, end));
+      } catch (NumberFormatException ignored) { /* try next pattern */ }
+    }
+    return null;
+  }
+
+  private static int matchingClose(String s, int open) {
+    if (open >= s.length()) return -1;
+    char openChar = s.charAt(open);
+    char closeChar = openChar == '{' ? '}' : ']';
+    int depth = 0;
+    boolean inStr = false;
+    for (int i = open; i < s.length(); i++) {
+      char c = s.charAt(i);
+      if (inStr) {
+        if (c == '\\') { i++; continue; }
+        if (c == '"') inStr = false;
+      } else {
+        if (c == '"') inStr = true;
+        else if (c == openChar) depth++;
+        else if (c == closeChar) {
+          depth--;
+          if (depth == 0) return i;
+        }
+      }
+    }
+    return -1;
   }
 }

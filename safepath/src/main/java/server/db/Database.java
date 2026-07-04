@@ -139,8 +139,11 @@ public class Database {
     }
   }
 
-  /** TiDB/MySQL dumps may import FKs with incompatible collations — recreate child tables. */
+  /** One-time repair when a MySQL dump left legacy FKs that TiDB rejects. */
   private void repairImportedSchema(Statement st) throws SQLException {
+    if (!hasLegacyForeignKeys(st)) {
+      return;
+    }
     String[] childTables = {
         "user_unsafe_reports", "trip_history", "password_reset_tokens",
         "auth_tokens", "guardians"
@@ -150,9 +153,24 @@ public class Database {
       for (String table : childTables) {
         st.executeUpdate("DROP TABLE IF EXISTS `" + table + "`");
       }
-      System.out.println("[Database] Recreated TiDB-compatible child tables (no legacy FKs)");
+      System.out.println("[Database] One-time TiDB schema repair — removed legacy FK tables");
     } finally {
       st.execute("SET FOREIGN_KEY_CHECKS=1");
+    }
+  }
+
+  private boolean hasLegacyForeignKeys(Statement st) throws SQLException {
+    String sql = """
+        SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS
+        WHERE CONSTRAINT_SCHEMA = DATABASE()
+          AND CONSTRAINT_TYPE = 'FOREIGN KEY'
+          AND CONSTRAINT_NAME IN (
+            'fk_tokens_user', 'fk_guardians_user', 'fk_reset_user',
+            'fk_trip_history_user', 'fk_user_unsafe_user'
+          )
+        """;
+    try (ResultSet rs = st.executeQuery(sql)) {
+      return rs.next() && rs.getInt(1) > 0;
     }
   }
 
@@ -264,6 +282,15 @@ public class Database {
          PreparedStatement ps = conn.prepareStatement(sql)) {
       ps.setString(1, guardianId);
       ps.setString(2, userId);
+      ps.executeUpdate();
+    }
+  }
+
+  public void deletePasswordResetTokensForUser(String userId) throws SQLException {
+    String sql = "DELETE FROM password_reset_tokens WHERE user_id = ?";
+    try (Connection conn = openConnection();
+         PreparedStatement ps = conn.prepareStatement(sql)) {
+      ps.setString(1, userId);
       ps.executeUpdate();
     }
   }

@@ -3,15 +3,14 @@ Set-Location $PSScriptRoot
 
 $mvn = if (Get-Command mvn -ErrorAction SilentlyContinue) { "mvn" } else { Join-Path $PSScriptRoot "mvnw.cmd" }
 
+Write-Host "=== Stopping old server (unlocks JAR for rebuild) ==="
+& (Join-Path $PSScriptRoot "stop-server.ps1")
+
 Write-Host "=== Building SafePath (Maven) ==="
 & $mvn -q clean package
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-$conn = Get-NetTCPConnection -LocalPort 8080 -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
-if ($conn) {
-  Write-Host "Stopping existing server on port 8080..."
-  Stop-Process -Id $conn.OwningProcess -Force -ErrorAction SilentlyContinue
-  Start-Sleep -Seconds 1
+if ($LASTEXITCODE -ne 0) {
+  Write-Host "BUILD FAILED — if JAR is locked, close any java -jar safepath window and retry."
+  exit $LASTEXITCODE
 }
 
 Write-Host "=== Starting http://localhost:8080/ ==="

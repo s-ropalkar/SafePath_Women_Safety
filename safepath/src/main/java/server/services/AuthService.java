@@ -142,18 +142,30 @@ public class AuthService {
 
       String token = UUID.randomUUID().toString().replace("-", "");
       long expires = System.currentTimeMillis() + 60L * 60 * 1000;
+      db.deletePasswordResetTokensForUser(user.get("id"));
       db.insertPasswordResetToken(token, user.get("id"), expires);
 
       int port = server.util.AppConfig.serverPort();
-      String resetLink = server.util.AppConfig.appBaseUrl(port) + "reset-password.html?token=" + token;
+      String base = server.util.AppConfig.appBaseUrl(port);
+      String localBase = server.util.AppConfig.localBaseUrl(port);
+      String resetLink = base + "reset-password.html?token=" + token;
       String subject = "SafePath AI - Password Reset";
-      String body = "Hello " + user.get("name") + ",\n\n"
-          + "Reset your SafePath password using this link (valid 1 hour):\n"
-          + resetLink + "\n\n"
-          + "If you did not request this, ignore this email.";
-      boolean delivered = new EmailService().sendSync(normalized, subject, body);
+      StringBuilder body = new StringBuilder();
+      body.append("Hello ").append(user.get("name")).append(",\n\n")
+          .append("Reset your SafePath password (valid 1 hour):\n\n")
+          .append(resetLink).append("\n\n")
+          .append("Keep SafePath running, then open the link in your browser.\n");
+      if (!base.equals(localBase)) {
+        body.append("On this PC only: ").append(localBase)
+            .append("reset-password.html?token=").append(token).append("\n\n");
+      }
+      body.append("If you did not request this, ignore this email.");
+      boolean delivered = new EmailService().sendSync(normalized, subject, body.toString());
       result.put("emailQueued", true);
       result.put("emailDelivered", delivered);
+      if (resetLink.contains("localhost") || resetLink.contains("127.0.0.1")) {
+        System.out.println("[PasswordReset] Dev reset link: " + resetLink);
+      }
       if (!delivered) {
         result.put("deliveryNote", EmailService.isSmtpConfigured()
             ? "SMTP send failed — check server console. Reset link saved in email_outbox table."
@@ -165,8 +177,18 @@ public class AuthService {
     }
   }
 
+  public boolean isResetTokenValid(String token) throws IOException {
+    if (token == null || token.isBlank()) return false;
+    try {
+      return Database.get().findUserIdByResetToken(token.trim()) != null;
+    } catch (SQLException e) {
+      throw dbError(e);
+    }
+  }
+
   public void resetPassword(String token, String newPassword) throws IOException {
     if (token == null || token.isBlank()) throw new IllegalArgumentException("Reset token is required");
+    token = token.trim();
     if (newPassword == null || newPassword.length() < 6) {
       throw new IllegalArgumentException("Password must be at least 6 characters");
     }

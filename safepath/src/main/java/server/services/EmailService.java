@@ -37,6 +37,16 @@ public class EmailService {
     return EmailQueueService.get().enqueueBatch(emails, subject, body);
   }
 
+  /** Synchronous delivery for trip/SOS/arrival — returns count actually sent via SMTP. */
+  int sendAllSync(List<String> emails, String subject, String body) {
+    int sent = 0;
+    for (String email : emails) {
+      if (email == null || !email.contains("@")) continue;
+      if (sendSync(email.trim(), subject, body)) sent++;
+    }
+    return sent;
+  }
+
   /** Enqueue for async delivery (non-blocking for HTTP threads). */
   public boolean send(String to, String subject, String body) {
     try {
@@ -219,7 +229,7 @@ public class EmailService {
         + "User: " + userName + "\nTrip Started\n\n"
         + "Source: " + source + "\nDestination: " + destination + "\n\n"
         + "Live Tracking Link:\n" + trackingLink;
-    return queueAll(emails, subject, body);
+    return sendAllSync(emails, subject, body);
   }
 
   public int sendModerateAlert(String userName, double score, double lat, double lng,
@@ -261,7 +271,7 @@ public class EmailService {
         + "Last known location: " + lat + ", " + lng + "\n"
         + "https://www.google.com/maps?q=" + lat + "," + lng + "\n\n"
         + "Live tracking link:\n" + link;
-    return queueAll(emails, subject, body);
+    return sendAllSync(emails, subject, body);
   }
 
   public int sendEmergencySos(String userName, String details, double lat, double lng,
@@ -274,7 +284,7 @@ public class EmailService {
         + "https://www.google.com/maps?q=" + lat + "," + lng + "\n\n"
         + "Safety Score: " + (int) score + "/100\n\n"
         + "Please contact the user immediately.\nLive tracking:\n" + link;
-    return queueAll(emails, subject, body);
+    return sendAllSync(emails, subject, body);
   }
 
   /** Minimal blocking SMTP client with STARTTLS support. */

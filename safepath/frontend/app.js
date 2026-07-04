@@ -36,6 +36,7 @@ let tripDestination = null;
 let lastAlertLevel = "";
 let stoppedPromptShown = false;
 let poiData = { police: [], hospital: [], hotel: [], hostel: [], metro: [], bus: [] };
+let poiRouteBbox = null;
 let markerLayers = {};
 let permanentMarkers = [];
 let unsafeLayer = L.layerGroup().addTo(map);
@@ -62,14 +63,18 @@ function getGuardianShareUrl() {
 }
 
 function toastEmailResult(data, sentMsg, type = "success") {
-  if (!data || !data.emailsQueued) {
+  const guardianCount = data?.guardianEmails ?? data?.emailsQueued ?? 0;
+  const delivered = data?.emailsDelivered ?? data?.emailsSent ?? 0;
+  if (!guardianCount) {
     toast("Add guardians with email to receive alerts.", "warn");
     return;
   }
-  if (data.emailDelivery === "queued" || data.emailsSent > 0) {
-    toast(sentMsg || "Guardian alert queued for delivery.", type);
+  if (data?.emailDelivery === "delivered" || delivered >= guardianCount) {
+    toast(sentMsg || "Guardian email sent.", type);
+  } else if (data?.emailDelivery === "partial" || delivered > 0) {
+    toast(`${sentMsg || "Guardian alert sent."} (${delivered}/${guardianCount} delivered)`, type);
   } else {
-    toast("Alert saved for guardian.", "info");
+    toast("Email could not be sent. Check spam folder or ask admin to verify SMTP in app.properties.", "warn");
   }
 }
 
@@ -428,6 +433,79 @@ function clearRoutes() {
   currentRoutes = {};
   currentPath = [];
   poiPathLayer.clearLayers();
+  clearCheckpointMarkers();
+}
+
+function clearCheckpointMarkers() {
+  Object.keys(markerLayers).forEach((type) => {
+    if (markerLayers[type]) map.removeLayer(markerLayers[type]);
+    delete markerLayers[type];
+  });
+  updateCheckpointButtons();
+}
+
+function updateCheckpointButtons() {
+  ["police", "hospital", "hotel", "hostel", "metro", "bus"].forEach((type) => {
+    const btn = document.getElementById(`toggle${capitalize(type)}`);
+    if (!btn) return;
+    const count = (poiData[type] || []).length;
+    const visible = !!markerLayers[type];
+    btn.style.opacity = visible ? "1" : count ? "0.92" : "0.4";
+    btn.classList.toggle("active", visible);
+    btn.title = count
+      ? `${count} ${type} loaded — click to ${visible ? "hide" : "show"} on map`
+      : `No ${type} in this route area`;
+  });
+}
+
+function poiInRouteBbox(lat, lng) {
+  if (!poiRouteBbox) return true;
+  const { south, north, west, east } = poiRouteBbox;
+  return lat >= south && lat <= north && lng >= west && lng <= east;
+}
+
+function filterPoisForRoute(items) {
+  return (items || []).filter((p) => {
+    const lat = Number(p.lat);
+    const lng = Number(p.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return false;
+    if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return false;
+    return poiInRouteBbox(lat, lng);
+  });
+}
+
+function ensureMarkersVisible(items) {
+  if (!items.length) return;
+  const bounds = L.latLngBounds(items.map((p) => [p.lat, p.lng]));
+  const view = map.getBounds();
+  const visible = items.some((p) => view.contains([p.lat, p.lng]));
+  if (!visible) {
+    map.fitBounds(bounds.pad(0.12), { maxZoom: 15, animate: true });
+  }
+}
+
+function buildCheckpointLayer(type, items) {
+  const layer = L.layerGroup();
+  items.forEach((poi) => {
+    const lat = Number(poi.lat);
+    const lng = Number(poi.lng);
+    const ref = getReferencePosition();
+    let popup = `<b>${poi.name}</b><br>${capitalize(type)}`;
+    if (ref) {
+      const dist = haversineKm(ref.lat, ref.lng, lat, lng).toFixed(2);
+      popup += `<br><b>${dist} km away</b>`;
+    }
+    L.marker([lat, lng], {
+      icon: L.divIcon({
+        html: `<span class="map-badge map-badge--active ${type}">${markerIcons[type]}</span>`,
+        className: "poi-marker-wrap poi-marker-wrap--active",
+        iconSize: [34, 34],
+        iconAnchor: [17, 17],
+      }),
+      zIndexOffset: 1200,
+    }).bindPopup(popup).on("click", () => showPathToPoi(lat, lng)).addTo(layer);
+  });
+  return layer;
 }
 
 async function loadPOIs(src, dst) {
@@ -438,6 +516,7 @@ async function loadPOIs(src, dst) {
   const east = Math.max(src.lng, dst.lng) + pad;
 
   poiData = { police: [], hospital: [], hotel: [], hostel: [], metro: [], bus: [] };
+  poiRouteBbox = { south, west, north, east };
 
   try {
     const res = await fetch(`${API}/api/nearby-pois`, {
@@ -451,16 +530,21 @@ async function loadPOIs(src, dst) {
     }
     (data.pois || []).forEach((poi) => {
       const type = poi.type || "hotel";
+      const lat = Number(poi.lat);
+      const lng = Number(poi.lng);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+      if (!poiInRouteBbox(lat, lng)) return;
       const item = {
-        lat: poi.lat,
-        lng: poi.lng,
+        lat,
+        lng,
         name: poi.name || "Unnamed safe spot",
       };
       if (poiData[type]) poiData[type].push(item);
     });
     const total = Object.values(poiData).reduce((n, arr) => n + arr.length, 0);
+    updateCheckpointButtons();
     if (total > 0) {
-      toast(`Loaded ${total} safe checkpoints — toggle buttons in sidebar to show on map.`, "info");
+      toast(`Loaded ${total} checkpoints — click Hotels, Police, etc. in the sidebar to show them.`, "info");
     } else {
       toast("No checkpoints found in this area.", "warn");
     }
@@ -479,39 +563,33 @@ function toggleMarkers(type) {
   if (markerLayers[type]) {
     map.removeLayer(markerLayers[type]);
     delete markerLayers[type];
-    button.style.opacity = "0.55";
+    updateCheckpointButtons();
     return;
   }
 
-  const items = poiData[type] || [];
+  const items = filterPoisForRoute(poiData[type] || []);
   if (!items.length) {
-    toast(`No ${type} data loaded yet. Click Find Route first.`, "warn");
+    toast(`No ${type} near this route. Try Find Route again.`, "warn");
     return;
   }
 
-  const layer = L.layerGroup();
-  items.forEach((poi) => {
-    const ref = getReferencePosition();
-    let popup = `<b>${poi.name}</b><br>${capitalize(type)}`;
-    if (ref) {
-      const dist = haversineKm(ref.lat, ref.lng, poi.lat, poi.lng).toFixed(2);
-      popup += `<br><b>${dist} km away</b>`;
-    }
-    L.marker([poi.lat, poi.lng], {
-      icon: L.divIcon({
-        html: `<span class="map-badge ${type}">${markerIcons[type]}</span>`,
-        className: "poi-marker-wrap",
-        iconSize: [26, 26],
-        iconAnchor: [13, 13],
-      }),
-      zIndexOffset: 400,
-    }).bindPopup(popup).on("click", () => showPathToPoi(poi.lat, poi.lng)).addTo(layer);
-  });
-  layer.addTo(map);
-  markerLayers[type] = layer;
-  button.style.opacity = "1";
-  toast(`Showing ${items.length} ${type} marker${items.length === 1 ? "" : "s"} on map.`, "success");
+  markerLayers[type] = buildCheckpointLayer(type, items);
+  markerLayers[type].addTo(map);
+  updateCheckpointButtons();
+  ensureMarkersVisible(items);
+  toast(`Showing ${items.length} ${type} checkpoint${items.length === 1 ? "" : "s"} on the route.`, "success");
 }
+
+function setupCheckpointButtons() {
+  document.querySelectorAll("[data-checkpoint]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      toggleMarkers(btn.dataset.checkpoint);
+    });
+  });
+}
+
+window.toggleMarkers = toggleMarkers;
 
 function capitalize(s) {
   return s.charAt(0).toUpperCase() + s.slice(1);
@@ -1622,7 +1700,7 @@ async function submitArrivalReview() {
       routeType: activeRouteType || meta.routeType || "balanced",
     },
   );
-  if (data) {
+    if (data) {
     if (data.safetyScore != null) {
       lastSafetyScore = Number(data.safetyScore);
       updateSafetyStatus(lastSafetyScore);
@@ -1634,7 +1712,8 @@ async function submitArrivalReview() {
         ? ` Safety score +${appliedDelta.toFixed(0)} (now ${lastSafetyScore.toFixed(0)}/100).`
         : ` Safety score ${appliedDelta.toFixed(0)} (now ${lastSafetyScore.toFixed(0)}/100).`;
     }
-    if (data.emailsQueued) {
+    const guardianCount = data.guardianEmails ?? data.emailsQueued ?? 0;
+    if (guardianCount > 0) {
       toastEmailResult(data, `Reached safely — guardian notified.${scoreMsg}`, "success");
     } else {
       toast(`Safe arrival confirmed.${scoreMsg}`, "success");
@@ -1668,6 +1747,7 @@ document.addEventListener("DOMContentLoaded", () => {
   if (location.hash === "#page-profile") loadProfileData();
   setupMapRouteResizer();
   setupPlanRouteScroll();
+  setupCheckpointButtons();
 
   document.querySelectorAll("#arrivalStarRow .star-btn").forEach((btn) => {
     btn.addEventListener("click", () => {

@@ -67,6 +67,7 @@ public class Server {
     httpServer.createContext("/api/google-login",    new GoogleLoginHandler());
     httpServer.createContext("/api/forgot-password", new ForgotPasswordHandler());
     httpServer.createContext("/api/reset-password",  new ResetPasswordHandler());
+    httpServer.createContext("/api/reset-password/validate", new ValidateResetTokenHandler());
     httpServer.createContext("/api/config",          new ConfigHandler());
     httpServer.createContext("/api/guardians",       new GuardiansHandler());
     httpServer.createContext("/api/unsafe-locations", new UnsafeLocationsHandler());
@@ -94,6 +95,11 @@ public class Server {
     httpServer.start();
     System.out.println("SafePath AI Server started on http://127.0.0.1:" + port);
     System.out.println("Open http://localhost:" + port + "/  (login page)");
+    String appUrl = AppConfig.appBaseUrl(port);
+    System.out.println("App URL (emails / reset links): " + appUrl);
+    if (!appUrl.equals(AppConfig.localBaseUrl(port))) {
+      System.out.println("Same PC only: " + AppConfig.localBaseUrl(port));
+    }
     System.out.println("Frontend: " + frontendDir.toAbsolutePath());
     if (EmailService.isSmtpConfigured()) {
       if (EmailService.verifySmtpLogin()) {
@@ -289,6 +295,29 @@ public class Server {
         Map<String, Object> req = JsonUtil.parseJson(readBody(exchange));
         authService.resetPassword((String) req.get("token"), (String) req.get("password"));
         sendJson(exchange, 200, Map.of("status", "success", "message", "Password updated. You can log in now."));
+      } catch (Exception e) { sendError(exchange, 400, e.getMessage()); }
+    }
+  }
+
+  private class ValidateResetTokenHandler implements HttpHandler {
+    @Override
+    public void handle(HttpExchange exchange) throws IOException {
+      setCorsHeaders(exchange);
+      if (handleOptions(exchange)) return;
+      if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
+        sendError(exchange, 405, "GET required");
+        return;
+      }
+      try {
+        String token = queryParam(exchange, "token");
+        boolean valid = authService.isResetTokenValid(token);
+        Map<String, Object> r = new HashMap<>();
+        r.put("status", "success");
+        r.put("valid", valid);
+        if (!valid) {
+          r.put("message", "Reset link expired or invalid. Request a new password reset from login.");
+        }
+        sendJson(exchange, 200, r);
       } catch (Exception e) { sendError(exchange, 400, e.getMessage()); }
     }
   }
@@ -1016,10 +1045,20 @@ public class Server {
   // HELPERS
   // ══════════════════════════════════════════════════════════════════════════
 
-  private void putEmailStatus(Map<String, Object> r, int guardianCount, int emailsQueued) {
+  private void putEmailStatus(Map<String, Object> r, int guardianCount, int emailsDelivered) {
+    r.put("guardianEmails", guardianCount);
+    r.put("emailsDelivered", emailsDelivered);
     r.put("emailsQueued", guardianCount);
-    r.put("emailsSent", emailsQueued);
-    r.put("emailDelivery", emailsQueued > 0 ? "queued" : "none");
+    r.put("emailsSent", emailsDelivered);
+    if (guardianCount <= 0) {
+      r.put("emailDelivery", "none");
+    } else if (emailsDelivered >= guardianCount) {
+      r.put("emailDelivery", "delivered");
+    } else if (emailsDelivered > 0) {
+      r.put("emailDelivery", "partial");
+    } else {
+      r.put("emailDelivery", "failed");
+    }
   }
 
   private void setCorsHeaders(HttpExchange e) {

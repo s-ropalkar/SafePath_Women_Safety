@@ -2,9 +2,14 @@ package server.util;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.Inet4Address;
+import java.net.InetAddress;
+import java.net.NetworkInterface;
+import java.net.SocketException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Enumeration;
 import java.util.Properties;
 
 /** Loads config/app.properties; environment variables override file values. */
@@ -115,7 +120,33 @@ public final class AppConfig {
     if (renderUrl != null && !renderUrl.isBlank()) {
       return renderUrl.endsWith("/") ? renderUrl : renderUrl + "/";
     }
+    String lan = detectLanIPv4();
+    if (lan != null) {
+      return "http://" + lan + ":" + port + "/";
+    }
+    return localBaseUrl(port);
+  }
+
+  public static String localBaseUrl(int port) {
     return "http://localhost:" + port + "/";
+  }
+
+  /** First site-local IPv4 (e.g. 192.168.x.x) for email links on same WiFi. */
+  public static String detectLanIPv4() {
+    try {
+      Enumeration<NetworkInterface> ifaces = NetworkInterface.getNetworkInterfaces();
+      while (ifaces.hasMoreElements()) {
+        NetworkInterface ni = ifaces.nextElement();
+        if (!ni.isUp() || ni.isLoopback()) continue;
+        for (var addr : ni.getInterfaceAddresses()) {
+          InetAddress ip = addr.getAddress();
+          if (ip instanceof Inet4Address && !ip.isLoopbackAddress() && ip.isSiteLocalAddress()) {
+            return ip.getHostAddress();
+          }
+        }
+      }
+    } catch (SocketException ignored) { /* fall through */ }
+    return null;
   }
 
   public static String mysqlHost() {

@@ -87,7 +87,7 @@ async function forgotPassword() {
     } else if (data.emailQueued) {
       toast(data.deliveryNote || "Email could not be sent via SMTP. Ask admin to check server logs.", "warn");
     } else {
-      toast(data.message || "If that email is registered, reset instructions were sent.", "success");
+      toast(data.message || "If that email is registered, reset instructions were sent.", "info");
     }
     showLoginForm();
   } catch (err) {

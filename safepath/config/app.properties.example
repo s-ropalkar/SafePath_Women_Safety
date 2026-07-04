@@ -13,6 +13,7 @@ smtp.ssl=false
 google.client.id=
 
 server.port=8080
+# Email reset links: leave blank = auto-detect WiFi IP. For deploy set public URL:
 # app.base.url=https://your-app.onrender.com/
 
 # TiDB Cloud (MySQL-compatible) — local MySQL: set mysql.host=localhost mysql.port=3306 mysql.sslMode=DISABLED
